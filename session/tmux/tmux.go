@@ -141,6 +141,12 @@ func (t *TmuxSession) Start(workDir string) error {
 		log.InfoLog.Printf("Warning: failed to enable mouse scrolling for session %s: %v", t.sanitizedName, err)
 	}
 
+	// Disable automatic terminal title updates to prevent window title flickering
+	setTitlesCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "set-titles", "off")
+	if err := t.cmdExec.Run(setTitlesCmd); err != nil {
+		log.InfoLog.Printf("Warning: failed to disable set-titles for session %s: %v", t.sanitizedName, err)
+	}
+
 	err = t.Restore()
 	if err != nil {
 		if cleanupErr := t.Close(); cleanupErr != nil {

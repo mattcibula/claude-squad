@@ -166,6 +166,10 @@ func (m *home) handleHelpState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Any key press will close the help overlay
 	shouldClose := m.textOverlay.HandleKeyPress(msg)
 	if shouldClose {
+		// Call the onDismiss callback if it exists
+		if m.textOverlay.OnDismiss != nil {
+			m.textOverlay.OnDismiss()
+		}
 		m.state = stateDefault
 		return m, tea.Sequence(
 			tea.WindowSize(),

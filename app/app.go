@@ -74,6 +74,9 @@ type home struct {
 	// keySent is used to manage underlining menu items
 	keySent bool
 
+	// isAttached tracks whether we're currently attached to a tmux session
+	isAttached bool
+
 	// -- UI Components --
 
 	// list displays the list of instances
@@ -189,7 +192,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hideErrMsg:
 		m.errBox.Clear()
 	case previewTickMsg:
-		cmd := m.instanceChanged()
+		var cmd tea.Cmd
+		// Skip preview updates while attached to avoid interfering with the active session
+		if !m.isAttached {
+			cmd = m.instanceChanged()
+		}
 		return m, tea.Batch(
 			cmd,
 			func() tea.Msg {
@@ -201,22 +208,25 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu.ClearKeydown()
 		return m, nil
 	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
-				continue
-			}
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
-			} else {
-				if prompt {
-					instance.TapEnter()
-				} else {
-					instance.SetStatus(session.Ready)
+		// Skip metadata updates while attached to avoid interfering with the active session
+		if !m.isAttached {
+			for _, instance := range m.list.GetInstances() {
+				if !instance.Started() || instance.Paused() {
+					continue
 				}
-			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+				updated, prompt := instance.HasUpdated()
+				if updated {
+					instance.SetStatus(session.Running)
+				} else {
+					if prompt {
+						instance.TapEnter()
+					} else {
+						instance.SetStatus(session.Ready)
+					}
+				}
+				if err := instance.UpdateDiffStats(); err != nil {
+					log.WarningLog.Printf("could not update diff stats: %v", err)
+				}
 			}
 		}
 		return m, tickUpdateMetadataCmd
@@ -615,14 +625,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
 			return m, nil
 		}
+		// Set attached state BEFORE showing help screen to stop preview updates immediately
+		m.isAttached = true
 		// Show help screen before attaching
 		m.showHelpScreen(helpTypeInstanceAttach{}, func() {
 			ch, err := m.list.Attach()
 			if err != nil {
 				m.handleError(err)
+				m.isAttached = false
 				return
 			}
 			<-ch
+			m.isAttached = false
 			m.state = stateDefault
 		})
 		return m, nil
